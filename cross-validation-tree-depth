@@ -1,0 +1,435 @@
+import numpy as np
+from numpy.matlib import repmat
+from scipy.io import loadmat
+import time
+
+# Non-interactive plots
+%matplotlib inline
+import matplotlib.pyplot as plt
+
+import sys
+sys.path.append("/home/codio/workspace/.modules")
+from helper import *
+
+print("Python version:", sys.version.split(" ")[0])
+
+data = loadmat("ion.mat")
+xTr = data["xTr"].T
+yTr = data["yTr"].flatten()
+xTe = data["xTe"].T
+yTe = data["yTe"].flatten()
+print(f"Number of features: {xTr.shape[1]}")
+print(f"Number of training points: {xTr.shape[0]}")
+print(f"Number of test points: {xTe.shape[0]}")
+
+# Create a regression tree with no restriction on its depth
+tree = RegressionTree(depth=np.inf)
+
+# Fit/train the regression tree
+tree.fit(xTr, yTr)
+
+# Use the trained regression tree to make prediction
+pred = tree.predict(xTr)
+
+def mean_squared_loss(pred, truth):
+    """
+    Calculates the loss between predicted and true labels.
+
+    Input:
+        pred: n-dimensional vector of predicted labels
+        truth: n-dimensional vector of true labels
+
+    Output:
+        loss: average squared loss
+    """
+    return np.mean((pred - truth) ** 2)
+
+print(f"Training Loss: {mean_squared_loss(tree.predict(xTr), yTr):.4f}")
+print(f"Test Loss: {mean_squared_loss(tree.predict(xTe), yTe):.4f}")
+
+def grid_search(xTr, yTr, xVal, yVal, depths):
+    """
+    Calculates the training and validation loss for trees trained on xTr and validated on yTr with a number of depths.
+
+    Input:
+        xTr: nxd training data matrix
+        yTr: n-dimensional vector of training labels
+        xVal: mxd validation data matrix
+        yVal: m-dimensional vector of validation labels
+        depths: a list of len k of depths
+
+    Output:
+        best_depth, training_losses, validation_losses
+        best_depth: the depth that yields that lowest validation loss
+        training_losses: a list of len k. the i-th entry corresponds to the the training loss of the tree of depth=depths[i]
+        validation_losses: a list of len k. the i-th entry corresponds to the the validation loss of the tree of depth=depths[i]
+    """
+    training_losses = []
+    validation_losses = []
+    best_depth = None
+
+    for d in depths:
+        tree = RegressionTree(d)
+        tree.fit(xTr, yTr)
+        training_losses.append(square_loss(tree.predict(xTr), yTr))
+        validation_losses.append(square_loss(tree.predict(xVal), yVal))
+        best_depth = depths[np.argmin(validation_losses)]
+    
+    return best_depth, training_losses, validation_losses  
+
+  depths = np.arange(10)
+
+# 80-20 split of the training data for demo purposes here
+train_split = int(0.8 * xTr.shape[0])
+best_depth, training_losses, validation_losses = grid_search(
+    xTr[:train_split], yTr[:train_split], xTr[train_split:], yTr[train_split:], depths
+)
+
+print(f"Best Depth: {best_depth}")
+print(f"Validation Loss: {np.min(validation_losses):.2f}")
+
+plt.figure()
+plt.plot(depths, training_losses, "-*", label="Training")
+plt.plot(depths, validation_losses, "-*", label="Validation")
+plt.title("Training and Validation Loss")
+plt.xlabel("Tree Depth", fontsize=12)
+plt.ylabel("Mean Squared Error", fontsize=12)
+plt.legend()
+plt.grid()
+plt.show()
+
+depths = [1, 2, 3, 4, 5]
+k = len(depths)
+
+# 80-20 split of the training data
+train_split = int(0.8 * xTr.shape[0])
+best_depth, training_losses, validation_losses = grid_search(
+    xTr[:train_split], yTr[:train_split], xTr[train_split:], yTr[train_split:], depths
+)
+best_depth_grader, training_losses_grader, validation_losses_grader = (
+    grid_search_grader(
+        xTr[:train_split],
+        yTr[:train_split],
+        xTr[train_split:],
+        yTr[train_split:],
+        depths,
+    )
+)
+
+
+def grid_search_test1():
+    """
+    Check the length of training losses
+    """
+    return len(training_losses) == k
+
+
+def grid_search_test2():
+    """
+    Check the length of validation losses
+    """
+    return len(validation_losses) == k
+
+
+def grid_search_test3():
+    """
+    Check that argmin of validation losses returns the best depth
+    """
+    return best_depth == depths[np.argmin(validation_losses)]
+
+
+def grid_search_test4():
+    """
+    Check your best depth against our best depth
+    """
+    return best_depth == best_depth_grader
+
+
+def grid_search_test5():
+    """
+    Check your training losses against our training losses
+    """
+    your_losses = np.array(training_losses)
+    our_losses = np.array(training_losses_grader)
+    return np.linalg.norm(your_losses - our_losses) < 1e-7
+
+
+def grid_search_test6():
+    """
+    Check your validation losses against our validation losses
+    """
+    your_losses = np.array(validation_losses)
+    our_losses = np.array(validation_losses_grader)
+    return np.linalg.norm(your_losses - our_losses) < 1e-7
+
+
+runtest(grid_search_test1, "grid_search_test1")
+runtest(grid_search_test2, "grid_search_test2")
+runtest(grid_search_test3, "grid_search_test3")
+runtest(grid_search_test4, "grid_search_test4")
+runtest(grid_search_test5, "grid_search_test5")
+runtest(grid_search_test6, "grid_search_test6")
+
+def generate_kFold(n, k):
+    """
+    Generates [(list_of_training_indices, list_of_validation_indices), ...] for k-fold validation.
+
+    Input:
+        n: Number of training examples
+        k: Number of folds
+
+    Output:
+        kfold_indices: List of length k, where each entry takes the form
+                       (list_of_training_indices, list_of_validation_indices)
+    """
+    assert k >= 2
+    kfold_indices = []
+
+    indices = np.arange(n)
+    fold = np.full(k, n // k)
+    fold[:n % k] += 1
+    index = []
+    cur = 0
+
+    for f in fold:
+        index.append(indices[cur:cur + f])
+        cur += f
+        #print(cur)
+
+    for i in range(k):
+        itrain = np.concatenate([index[j] for j in range(k) if j != i])
+        ival = index[i]
+        kfold_indices.append((itrain, ival))
+        #print(kfold_indices)
+    
+    return kfold_indices
+
+#generate_kFold(5, 4)
+
+print(f"3-fold splits on 3 points: {generate_kFold(3, 3)}")
+print(f"4-fold splits on 5 points: {generate_kFold(5, 4)}")
+
+kfold_indices = generate_kFold(1004, 5)
+
+
+def generate_kFold_test1():
+    """
+    Check that five folds are generated
+    """
+    return len(kfold_indices) == 5  # You should generate five folds
+
+
+def generate_kFold_test2():
+    """
+    Check that, for each fold, the number of examples sum up to 1004
+    """
+    t = [
+        ((len(train_indices) + len(validation_indices)) == 1004)
+        for (train_indices, validation_indices) in kfold_indices
+    ]
+    return np.all(t)  
+
+
+def generate_kFold_test3():
+    """
+    Check that, for each fold, the training to validation
+    examples ratio is between 0.24 and 0.25.
+    """
+    ratio_validation = []
+    for train_indices, validation_indices in kfold_indices:
+        ratio = len(validation_indices) / len(train_indices)
+        ratio_validation.append(ratio > 0.24 and ratio < 0.26)
+        
+    return np.all(ratio_validation)
+
+
+def generate_kFold_test4():
+    """
+    Check that you use all the examples in all the training and validation folds
+    """
+    train_indices_set = set()       # Keep track of training indices for each fold
+    validation_indices_set = set()  # Keep track of validation indices for each fold
+    for train_indices, validation_indices in kfold_indices:
+        train_indices_set = train_indices_set.union(set(train_indices))
+        validation_indices_set = validation_indices_set.union(set(validation_indices))
+
+    check_train_set = train_indices_set == set(np.arange(1004))
+    check_test_set = validation_indices_set == set(np.arange(1004))
+    
+    return check_train_set and check_test_set
+
+
+runtest(generate_kFold_test1, "generate_kFold_test1")
+runtest(generate_kFold_test2, "generate_kFold_test2")
+runtest(generate_kFold_test3, "generate_kFold_test3")
+runtest(generate_kFold_test4, "generate_kFold_test4")
+
+def cross_validation(xTr, yTr, depths, indices):
+    """
+    Performs cross validation on training data with trees of varying depths.
+    The splits are specified in indices.
+
+    Input:
+        xTr: nxd training data matrix
+        yTr: n-dimensional vector of training labels
+        depths: List of length l of depths to be tried out
+        indices: Indices [(list_of_training_indices, list_of_validation_indices), ...]
+                 from generate_kFold, specifying the splits for each fold (length k)
+
+    Output:
+        best_depth: Depth corresponding to the minimum average validation loss
+        training_losses: List such that i-th entry corresponds to the average
+                         training loss of the tree of depth=depths[i]
+        validation_losses: List such that i-th entry corresponds to the average
+                           validation loss of the tree of depth=depths[i]
+    """
+    training_losses = []
+    validation_losses = []
+    best_depth = None
+
+    training = []
+    validation = []
+
+    for t, v in indices:
+        best_depth, training_losses, validation_losses = grid_search(xTr[t], yTr[t], xTr[v], yTr[v], depths)
+        training.append(training_losses)
+        validation.append(validation_losses)
+
+    training_losses = np.mean(training, axis=0)
+    validation_losses = np.mean(validation, axis=0)
+    best_depth = depths[np.argmin(validation_losses)]
+    
+    return best_depth, training_losses, validation_losses 
+
+depths = [1, 2, 3, 4]
+k = len(depths)
+
+# Generate indices; the same indices will be
+# used to cross check your solution and ours.
+indices = generate_kFold(len(xTr), 5)
+best_depth, training_losses, validation_losses = cross_validation(
+    xTr, yTr, depths, indices
+)
+best_depth_grader, training_losses_grader, validation_losses_grader = (
+    cross_validation_grader(xTr, yTr, depths, indices)
+)
+
+
+def cross_validation_test1():
+    """
+    Check the length of training losses
+    """
+    return len(training_losses) == k
+
+
+def cross_validation_test2():
+    """
+    Check the length of validation losses
+    """
+    return len(validation_losses) == k
+
+
+def cross_validation_test3():
+    """
+    Check that argmin of validation losses returns the best depth
+    """
+    return best_depth == depths[np.argmin(validation_losses)]
+
+
+def cross_validation_test4():
+    """
+    Check your best depth against our best depth
+    """
+    return best_depth == best_depth_grader
+
+
+def cross_validation_test5():
+    """
+    Check your training losses against our training losses
+    """
+    your_losses = np.array(training_losses)
+    our_losses = np.array(training_losses_grader)
+    return np.linalg.norm(your_losses - our_losses) < 1e-7
+
+
+def cross_validation_test6():
+    """
+    Check your validation losses against our validation losses
+    """
+    your_losses = np.array(validation_losses)
+    our_losses = np.array(validation_losses_grader)
+    return np.linalg.norm(your_losses - our_losses) < 1e-7
+
+
+runtest(cross_validation_test1, "cross_validation_test1")
+runtest(cross_validation_test2, "cross_validation_test2")
+runtest(cross_validation_test3, "cross_validation_test3")
+runtest(cross_validation_test4, "cross_validation_test4")
+runtest(cross_validation_test5, "cross_validation_test5")
+runtest(cross_validation_test6, "cross_validation_test6")
+
+
+tree = RegressionTree(depth=np.inf)
+print("Learning a tree that can grow to infinite depth...")
+tree.fit(xTr, yTr)
+print(f"Training Loss: {mean_squared_loss(tree.predict(xTr), yTr):.4f}")
+print(f"Test Loss: {mean_squared_loss(tree.predict(xTe), yTe):.4f}")
+
+print()
+print("Performing cross validation to find the best depth...")
+depths = [1, 3, 5, 7]
+k = len(depths)
+indices = generate_kFold(len(xTr), 5)
+best_depth, training_losses, validation_losses = cross_validation(
+    xTr, yTr, depths, indices
+)
+
+tree = RegressionTree(depth=best_depth)
+tree.fit(xTr, yTr)
+print("Best Depth:", best_depth)
+print(f"Training Loss: {mean_squared_loss(tree.predict(xTr), yTr):.4f}")
+print(f"Test Loss: {mean_squared_loss(tree.predict(xTe), yTe):.4f}")
+
+
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import GridSearchCV
+
+print("Learning a tree that can grow to infinite depth...")
+
+tree = DecisionTreeRegressor(
+    criterion="squared_error",  # Impurity function = Mean Squared Error (mean squared loss)
+    splitter="best",            # Take the best split
+    max_depth=None,             # Expand the tree to the maximum depth possible
+)
+tree.fit(xTr, yTr)
+print(f"Training Loss: {mean_squared_loss(tree.predict(xTr), yTr):.4f}")
+print(f"Test Loss: {mean_squared_loss(tree.predict(xTe), yTe):.4f}")
+
+print()
+print("Performing cross validation to find the best depth...")
+depths = [1, 3, 5, 7]
+
+# Define grid search with a parameter grid and number of folds
+tree = GridSearchCV(
+    DecisionTreeRegressor(),  # Model
+    param_grid={
+        "criterion": ["squared_error"],
+        "splitter": ["best"],
+        "max_depth": depths,
+    },          # Grid of parameters
+    cv=5,       # Five folds
+    n_jobs=-1,  # Run on all available cores
+)
+tree.fit(xTr, yTr)
+
+print("Best Depth:", tree.best_params_["max_depth"])
+
+tree = DecisionTreeRegressor(
+    criterion="squared_error", splitter="best", max_depth=tree.best_params_["max_depth"]
+)
+tree.fit(xTr, yTr)
+print(f"Training Loss: {mean_squared_loss(tree.predict(xTr), yTr):.4f}")
+print(f"Test Loss: {mean_squared_loss(tree.predict(xTe), yTe):.4f}")
+
+
+                                                        

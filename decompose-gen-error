@@ -1,0 +1,648 @@
+import numpy as np
+from numpy.matlib import repmat
+
+# Non-interactive plots
+%matplotlib inline
+import matplotlib.pyplot as plt
+
+import sys
+sys.path.append("/home/codio/workspace/.modules")
+from helper import *
+
+print("Python version:", sys.version.split(" ")[0])
+
+OFFSET = 1.75  # mu = [OFFSET, OFFSET]
+np.random.seed(1)
+X, y = toy_data(OFFSET, 1000)
+
+# Visualize the generated data
+ind1 = y == 1
+ind2 = y == 2
+plt.figure(figsize=(9, 6))
+plt.scatter(X[ind1, 0], X[ind1, 1], c="red", marker="o", label="Class 1")
+plt.scatter(X[ind2, 0], X[ind2, 1], c="blue", marker="o", label="Class 2")
+plt.legend(loc="upper left")
+plt.show()
+
+def compute_ybar(xTe, OFFSET):
+    """
+    Computes the expected label ybar for a set of inputs xTe,
+    generated from two normal distributions:
+    1. the first with mean [0, 0] and standard deviation I, and
+    2. the second with mean [OFFSET, OFFSET] and standard deviation I
+
+    Input:
+        xTe: Data matrix of shape nx2
+        OFFSET: The OFFSET passed into the toyData function. The difference in the
+                mu of normal distributions for points with labels class1 and class2.
+
+    Output:
+        ybar: nx1 vector of the expected labels for each vector in xTe
+    """
+    n, d = xTe.shape
+    ybar = np.empty(n)  # Initialize variable to be returned
+
+    # Feel free to use the following function to compute P([x]_\alpha | y)
+    norm_pdf = lambda x, mu, sigma: np.exp(-0.5 * np.power((x - mu) / sigma, 2)) / (
+        np.sqrt(2 * np.pi) * sigma
+    )
+
+    p1 = norm_pdf(xTe,0,1)
+    pXy1 = p1[:,0]*p1[:,1]
+    p2 = norm_pdf(xTe,OFFSET,1)
+    pXy2 = p2[:,0]*p2[:,1]
+
+    pX = pXy1*0.5 + pXy2*0.5
+    py1 = pXy1*0.5/pX
+    py2 = pXy2*0.5/pX
+    ybar = py1+2*py2
+
+    return ybar
+
+    def ybar_test1():
+    """
+    Check that ybar has the correct shape
+    """
+    OFFSET = 2
+    n = 1000
+    xTe, yTe = toy_data(OFFSET, n)
+    ybar = compute_ybar(xTe, OFFSET)
+    return ybar.shape == (n,)
+
+
+def ybar_test2():
+    """
+    Check that ybar has the correct values
+    """
+    OFFSET = 50
+
+    # First test dataset (means far away)
+    xTe = np.array(
+        [
+            [49.308783, 49.620651],
+            [1.705462, 1.885418],
+            [51.192402, 50.256330],
+            [0.205998, -0.089885],
+            [50.853083, 51.833237],
+        ]
+    )
+    yTe = np.array([2, 1, 2, 1, 2])
+
+    ybar = compute_ybar(xTe, OFFSET)
+
+    return np.isclose(np.mean(np.power(yTe - ybar, 2)), 0)
+
+
+def ybar_test3():
+    """
+    Another check that ybar has the correct values
+    """
+    OFFSET = 3
+
+    # Second test dataset (means close together)
+    xTe = np.array(
+        [
+            [0.45864, 0.71552],
+            [2.44662, 1.68167],
+            [1.00345, 0.15182],
+            [-0.10560, -0.48155],
+            [3.07264, 3.81535],
+            [3.13035, 2.72151],
+            [2.25265, 3.78697],
+        ]
+    )
+    yTe = np.array([1, 2, 1, 1, 2, 2, 2])
+
+    ybar = compute_ybar(xTe, OFFSET)
+
+    return np.mean(np.power(yTe - ybar, 2)) < 0.0002
+
+
+runtest(ybar_test1, "ybar_test1")
+runtest(ybar_test2, "ybar_test2")
+runtest(ybar_test3, "ybar_test3")
+
+def compute_noise(xTe, yTe, OFFSET):
+    """
+    Computes the noise (i.e., square mean of ybar - y) for a
+    set of inputs (xTe, yTe) generated with toyData using OFFSET.
+
+    Input:
+        xTe    : Data matrix of shape nx2
+        yTe    : n-dimensional array of true labels
+        OFFSET : The OFFSET passed into the toyData function.
+                 The difference in the mu of normal distributions
+                 for points with labels class1 and class2.
+
+    Output:
+        noise  : Scalar representing the noise component
+                 of the error of xTe.
+    """
+    noise = None  # Initialize variable to be returned
+
+    noise = np.mean((yTe - compute_ybar(xTe, OFFSET)) ** 2)
+
+    return noise
+
+    def noise_test1():
+    """
+    Check that noise is a scalar
+    """
+    OFFSET = 2
+    n = 1000
+    xTe, yTe = toy_data(OFFSET, n)
+    noise = compute_noise(xTe, yTe, OFFSET)
+    return np.isscalar(noise)
+
+
+def noise_test2():
+    """
+    Check that the noise small
+    """
+    OFFSET = 50
+
+    # First test dataset (means far away)
+    xTe = np.array(
+        [
+            [49.308783, 49.620651],
+            [1.705462, 1.885418],
+            [51.192402, 50.256330],
+            [0.205998, -0.089885],
+            [50.853083, 51.833237],
+        ]
+    )
+    yTe = np.array([2, 1, 2, 1, 2])
+    
+    noise = compute_noise(xTe, yTe, OFFSET)
+    
+    return np.isclose(noise, 0)
+
+
+def noise_test3():
+    """
+    Check that the noise is small
+    """
+    OFFSET = 3
+
+    # Second test dataset (means close together)
+    xTe = np.array(
+        [
+            [0.45864, 0.71552],
+            [2.44662, 1.68167],
+            [1.00345, 0.15182],
+            [-0.10560, -0.48155],
+            [3.07264, 3.81535],
+            [3.13035, 2.72151],
+            [2.25265, 3.78697],
+        ]
+    )
+    yTe = np.array([1, 2, 1, 1, 2, 2, 2])
+    
+    noise = compute_noise(xTe, yTe, OFFSET)
+    
+    return noise < 0.0002
+
+
+runtest(noise_test1, "noise_test1")
+runtest(noise_test2, "noise_test2")
+runtest(noise_test3, "noise_test3")
+
+OFFSET = 1.75
+np.random.seed(1)
+xTe, yTe = toy_data(OFFSET, 1000)
+
+# Compute Bayes classifier error
+ybar = compute_ybar(xTe, OFFSET)
+predictions = np.round(ybar)
+errors = predictions != yTe
+err = errors.sum() / len(yTe)
+print(f"Bayes Classifier Error: {100 * err:.2f}%")
+
+# Compute noise
+noise = compute_noise(xTe, yTe, OFFSET)
+print(f"Noise: {noise:.4f}")
+
+# Plot test data
+ind1 = yTe == 1
+ind2 = yTe == 2
+plt.figure(figsize=(9, 6))
+plt.scatter(xTe[ind1, 0], xTe[ind1, 1], c="red", marker="o", label="Class 1")
+plt.scatter(xTe[ind2, 0], xTe[ind2, 1], c="blue", marker="o", label="Class 2")
+plt.scatter(
+    xTe[errors, 0], xTe[errors, 1], c="black", s=100, alpha=0.25, label="Misclassified"
+)
+plt.title("Misclassified Points Shadowed in Gray")
+plt.legend(loc="upper left")
+plt.show()
+
+# Generate training data
+xTr, yTr = toy_data(OFFSET, 100)
+
+# Create a regression tree
+tree = RegressionTree(depth=np.inf)
+
+# Fit/train the regression tree
+tree.fit(xTr, yTr)
+
+# Use trained regression tree to make predictions
+pred = tree.predict(xTr)
+
+def compute_hbar(xTe, depth, Nsmall, NMODELS, OFFSET):
+    """
+    Computes the prediction of the average regression tree (hbar) on dataset xTe.
+    Each of the NMODELS regression trees used in the average tree should be
+    trained using data from toy_data(OFFSET, Nsmall).
+
+    Input:
+        xTe: Data matrix of shape nx2
+        depth: Depth of each regression tree to be trained
+        Nsmall: Number of points in the dataset that each tree is trained on
+        NMODELS: Number of regression trees to train
+        OFFSET: The OFFSET passed into the toyData function. The difference in the
+                mu of normal distributions for points with labels class1 and class2.
+    Output:
+        hbar: a nx1 vector of the expected labels for each vector in xTe
+    """
+    n = xTe.shape[0]
+    hbar = np.empty(n)  # Initialize variable to be returned
+
+    for i in range(NMODELS):
+        xTr,yTr = toy_data(OFFSET, Nsmall)
+        tree = RegressionTree(depth)
+        tree.fit(xTr, yTr)
+        hbar+=tree.predict(xTe)
+    hbar/=NMODELS
+        
+    return hbar
+
+
+    def hbar_test1():
+    """
+    Check that hbar has the correct shape
+    """
+    OFFSET = 2
+    depth = 2
+    Nsmall = 10
+    NMODELS = 10
+    n = 1000
+    xTe, yTe = toy_data(OFFSET, n)
+    hbar = compute_hbar(xTe, depth, Nsmall, NMODELS, OFFSET)
+    return hbar.shape == (n,)
+
+
+def hbar_test2():
+    """
+    Check that hbar has the correct value
+    """
+    OFFSET = 50
+    depth = 2
+    Nsmall = 10
+    NMODELS = 1
+    
+    # First test dataset (means far away)
+    xTe = np.array(
+        [
+            [49.308783, 49.620651],
+            [1.705462, 1.885418],
+            [51.192402, 50.256330],
+            [0.205998, -0.089885],
+            [50.853083, 51.833237],
+        ]
+    )
+    yTe = np.array([2, 1, 2, 1, 2])
+
+    hbar = compute_hbar(xTe, depth, Nsmall, NMODELS, OFFSET)
+    ybar = compute_ybar_grader(xTe, OFFSET)
+
+    return np.isclose(np.mean(np.power(hbar - ybar, 2)), 0)
+
+
+def hbar_test3():
+    """
+    Another check that hbar has the correct value
+    """
+    OFFSET = 3
+    depth = 3
+    Nsmall = 10
+    NMODELS = 100
+    np.random.seed(1)
+
+    # Second test dataset (means close together)
+    xTe = np.array(
+        [
+            [0.45864, 0.71552],
+            [2.44662, 1.68167],
+            [1.00345, 0.15182],
+            [-0.10560, -0.48155],
+            [3.07264, 3.81535],
+            [3.13035, 2.72151],
+            [2.25265, 3.78697],
+        ]
+    )
+    yTe = np.array([1, 2, 1, 1, 2, 2, 2])
+
+    hbar = compute_hbar(xTe, depth, Nsmall, NMODELS, OFFSET)
+    ybar = compute_ybar_grader(xTe, OFFSET)
+
+    return np.abs(np.mean(np.power(hbar - ybar, 2)) - 0.0017) < 0.001
+
+
+runtest(hbar_test1, "hbar_test1")
+runtest(hbar_test2, "hbar_test2")
+runtest(hbar_test3, "hbar_test3")
+
+def compute_bias(xTe, depth, Nsmall, NMODELS, OFFSET):
+    """
+    Computes the bias for data set xTe.
+    Each of the NMODELS regression trees used in the average tree should be
+    trained using data from toy_data(OFFSET, Nsmall).
+
+    Input:
+        xTe: Data matrix of shape nx2
+        depth: Depth of each regression tree to be trained
+        Nsmall: Number of points in the dataset that each tree is trained on
+        NMODELS: Number of regression trees to train
+        OFFSET: The OFFSET passed into the toyData function.
+                The difference in the mu of normal distributions
+                for points with labels class1 and class2.
+
+    Output:
+        bias: Scalar representing the bias component of the error of xTe
+    """
+    bias = None  # Initialize variable to be returned
+
+    bias = np.mean((compute_hbar(xTe, depth, Nsmall, NMODELS, OFFSET) - compute_ybar(xTe, OFFSET)) ** 2)
+
+    return bias
+
+
+    def bias_test1():
+    """
+    Check that bias is a scalar
+    """
+    OFFSET = 2
+    depth = 2
+    Nsmall = 10
+    NMODELS = 10
+    n = 1000
+    xTe, yTe = toy_data(OFFSET, n)
+    bias = compute_bias(xTe, depth, Nsmall, NMODELS, OFFSET)
+    return np.isscalar(bias)
+
+
+def bias_test2():
+    """
+    Check that bias has the correct value
+    """
+    OFFSET = 50
+    depth = 2
+    Nsmall = 10
+    NMODELS = 1
+    
+    # First test dataset (means far away)
+    xTe = np.array(
+        [
+            [49.308783, 49.620651],
+            [1.705462, 1.885418],
+            [51.192402, 50.256330],
+            [0.205998, -0.089885],
+            [50.853083, 51.833237],
+        ]
+    )
+    yTe = np.array([2, 1, 2, 1, 2])
+
+    bias = compute_bias(xTe, depth, Nsmall, NMODELS, OFFSET)
+    
+    return np.isclose(bias, 0)
+
+
+def bias_test3():
+    """
+    Another check that bias has the correct value
+    """
+    OFFSET = 3
+    depth = 3
+    Nsmall = 10
+    NMODELS = 100
+    np.random.seed(1)
+
+    # Second test dataset (means close together)
+    xTe = np.array(
+        [
+            [0.45864, 0.71552],
+            [2.44662, 1.68167],
+            [1.00345, 0.15182],
+            [-0.10560, -0.48155],
+            [3.07264, 3.81535],
+            [3.13035, 2.72151],
+            [2.25265, 3.78697],
+        ]
+    )
+    yTe = np.array([1, 2, 1, 1, 2, 2, 2])
+
+    bias = compute_bias(xTe, depth, Nsmall, NMODELS, OFFSET)
+    
+    return np.abs(bias - 0.0017) < 0.001
+
+
+runtest(bias_test1, "bias_test1")
+runtest(bias_test2, "bias_test2")
+runtest(bias_test3, "bias_test3")
+
+
+def compute_variance(xTe, depth, hbar, Nsmall, NMODELS, OFFSET):
+    """
+    Computes variance of classifiers trained on datasets from toy_data(OFFSET, Nsmall).
+    The prediction of the average classifier is assumed to be stored in hbar.
+
+    Input:
+        xTe: Data matrix of shape nx2
+        depth: Depth of each regression tree to be trained
+        hbar: nx1 vector of the predictions of hbar on the inputs xTe
+        Nsmall: Number of points in the dataset that each tree is trained on
+        NMODELS: Number of regression trees to train
+        OFFSET: The OFFSET passed into the toyData function.
+                The difference in the mu of normal distributions
+                for points with labels class1 and class2.
+
+    Output:
+        variance: Scalar representing the bias component of the error of xTe
+    """
+    n = xTe.shape[0]
+    vbar = np.zeros(n)
+    variance = None  # Initialize variable to be returned
+
+    for i in range(NMODELS):
+        xTr,yTr = toy_data(OFFSET, Nsmall)
+        tree = RegressionTree(depth)
+        tree.fit(xTr, yTr)
+        pred = tree.predict(xTe)
+        vbar+=(pred-hbar)**2
+    variance = np.mean(vbar)/NMODELS
+        
+    return variance
+
+
+    def variance_test1():
+    """
+    Check that variance is a scalar
+    """
+    OFFSET = 2
+    depth = 2
+    Nsmall = 10
+    NMODELS = 10
+    n = 1000
+    xTe, yTe = toy_data(OFFSET, n)
+    hbar = compute_hbar_grader(xTe, depth, Nsmall, NMODELS, OFFSET)
+    var = compute_variance(xTe, depth, hbar, Nsmall, NMODELS, OFFSET)
+    return np.isscalar(var)
+
+
+def variance_test2():
+    """
+    Check that variance has the correct value
+    """
+    OFFSET = 50
+    depth = 2
+    Nsmall = 10
+    NMODELS = 10
+
+    # First test dataset (means far away)
+    xTe = np.array(
+        [
+            [49.308783, 49.620651],
+            [1.705462, 1.885418],
+            [51.192402, 50.256330],
+            [0.205998, -0.089885],
+            [50.853083, 51.833237],
+        ]
+    )
+    yTe = np.array([2, 1, 2, 1, 2])
+
+    hbar = compute_hbar_grader(xTe, depth, Nsmall, NMODELS, OFFSET)
+    var = compute_variance(xTe, depth, hbar, Nsmall, NMODELS, OFFSET)
+    
+    return np.isclose(var, 0)
+
+
+def variance_test3():
+    """
+    Another check that variance has the correct value
+    """
+    OFFSET = 3
+    depth = 3
+    Nsmall = 10
+    NMODELS = 100
+    np.random.seed(1)
+
+    # Second test dataset (means close together)
+    xTe = np.array(
+        [
+            [0.45864, 0.71552],
+            [2.44662, 1.68167],
+            [1.00345, 0.15182],
+            [-0.10560, -0.48155],
+            [3.07264, 3.81535],
+            [3.13035, 2.72151],
+            [2.25265, 3.78697],
+        ]
+    )
+    yTe = np.array([1, 2, 1, 1, 2, 2, 2])
+
+    hbar = compute_hbar_grader(xTe, depth, Nsmall, NMODELS, OFFSET)
+    var = compute_variance(xTe, depth, hbar, Nsmall, NMODELS, OFFSET)
+    
+    return np.abs(var - 0.0404) < 0.0015
+
+
+runtest(variance_test1, "variance_test1")
+runtest(variance_test2, "variance_test2")
+runtest(variance_test3, "variance_test3")
+
+
+# Mean value of training and testing datasets
+OFFSET = 1.75
+
+# Size of small training dataset
+Nsmall = 75
+
+# Size of large testing dataset (approx. infinity)
+Nbig = 7500
+
+# Number of models used for computations
+NMODELS = 100
+
+# Depths to use for the models
+depths = [0, 1, 2, 3, 4, 5, 6, np.inf]
+
+# Initialize variables
+Ndepths = len(depths)
+lbias = np.zeros(Ndepths)
+lvariance = np.zeros(Ndepths)
+lnoise = np.zeros(Ndepths)
+lsum = np.zeros(Ndepths)
+lerror = np.zeros(Ndepths)
+
+# Evaluate classifier models of different depths
+for i in range(Ndepths):
+    depth = depths[i]
+    
+    # Dataset to use as an approximation of the true test dataset
+    xTe, yTe = toy_data(OFFSET, Nbig)
+
+    # Estimate variance
+    hbar = compute_hbar(xTe, depth, Nsmall, NMODELS, OFFSET)
+    variance = compute_variance(xTe, depth, hbar, Nsmall, NMODELS, OFFSET)
+
+    # Estimate bias
+    bias = compute_bias(xTe, depth, Nsmall, NMODELS, OFFSET)
+
+    # Estimate noise
+    noise = compute_noise(xTe, yTe, OFFSET)
+
+    # Estimate generalized error (average mean squared error)
+    error = 0
+    
+    for j in range(NMODELS):
+        xTr2, yTr2 = toy_data(OFFSET, Nsmall)
+        model = RegressionTree(depth=depth)
+        model.fit(xTr2, yTr2)
+        error += np.mean((model.predict(xTe) - yTe) ** 2)
+    
+    error /= NMODELS
+
+    # Store results for bias, variance, noise, and error
+    lbias[i] = bias
+    lvariance[i] = variance
+    lnoise[i] = noise
+    lsum[i] = lbias[i] + lvariance[i] + lnoise[i]
+    lerror[i] = error
+
+    # Print results for bias, variance, noise, and error
+    if np.isinf(depths[i]):
+        print(
+            f"Depth infinite - Var: {lvariance[i]:.4f}, Bias: {lbias[i]:.4f}, ",
+            f"Noise: {lnoise[i]:.4f}, Var+Bias+Noise: {lsum[i]:.4f}, ",
+            f"Error: {lerror[i]:.4f}",
+        )
+    else:
+        print(
+            f"Depth {depths[i]} - Var: {lvariance[i]:.4f}, Bias: {lbias[i]:.4f}, ",
+            f"Noise: {lnoise[i]:.4f}, Var+Bias+Noise: {lsum[i]:.4f}, ",
+            f"Error: {lerror[i]:.4f}",
+        )
+
+
+  plt.figure(figsize=(9, 6))
+
+plt.plot(lvariance[:Ndepths], "*", linestyle="-", linewidth=2, label="Variance (Var)")
+plt.plot(lbias[:Ndepths], "*", linestyle="-", linewidth=2, label="Bias")
+plt.plot(lnoise[:Ndepths], "*", linestyle="-.", linewidth=2, label="Noise")
+plt.plot(lerror[:Ndepths], "*", linestyle="-", linewidth=2, label="Error")
+plt.plot(lsum[:Ndepths], "*", c="black", linestyle="dotted", linewidth=2, label="Var+Bias+Noise")
+
+plt.legend(loc="upper right")
+plt.xlabel("Depth", fontsize=12)
+plt.ylabel("Mean Squared Error", fontsize=12)
+plt.xticks([i for i in range(Ndepths)], depths);
+
